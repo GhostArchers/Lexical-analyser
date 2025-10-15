@@ -1,213 +1,174 @@
 // Lexer.cpp
 #include "Lexer.h"
-
 #include <cctype>
+#include <iostream>
 
-const std::unordered_set<std::string> Lexer::KEYWORDS = {
-    "int", "float", "char", "if", "else", "for", "while", "do", "break", "string"
-};
+// Constructor
+Lexer::Lexer(const std::string& input)
+    : src(input), pos(0), line(1), column(1) {}
 
-Lexer::Lexer(const std::string& source)
-    : src(source), index(0), line(1), column(1) {}
-
-char Lexer::peek(int lookahead) const {
-    std::size_t pos = index + static_cast<std::size_t>(lookahead);
-    if (pos >= src.size()) return '\0';
-    return src[pos];
+// check if a word is a keyword
+bool Lexer::isKeyword(const std::string& word) {
+    for (const auto& kw : keywords)
+        if (kw == word) return true;
+    return false;
 }
 
-char Lexer::advance() {
-    if (isAtEnd()) return '\0';
-    char c = src[index++];
-    if (c == '\n') {
-        line += 1;
-        column = 1;
-    } else {
-        column += 1;
-    }
-    return c;
-}
-
-bool Lexer::isAtEnd() const {
-    return index >= src.size();
-}
-
+// skip whitespace and maintain line/column
 void Lexer::skipWhitespace() {
-    while (!isAtEnd()) {
-        char c = peek();
-        if (c == ' ' || c == '\r' || c == '\t' || c == '\n') {
-            advance();
+    while (pos < src.size() && std::isspace(static_cast<unsigned char>(src[pos]))) {
+        if (src[pos] == '\n') {
+            ++line;
+            column = 1;
         } else {
-            break;
+            ++column;
         }
-    }
-}
-
-bool Lexer::isAlpha(char c) {
-    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
-}
-
-bool Lexer::isDigit(char c) {
-    return std::isdigit(static_cast<unsigned char>(c)) != 0;
-}
-
-bool Lexer::isAlphaNumericOrUnderscore(char c) {
-    return isAlpha(c) || isDigit(c) || c == '_';
-}
-
-Token Lexer::makeIdentifierOrKeyword() {
-    int tokenLine = line;
-    int tokenColumn = column;
-
-    std::string value;
-    while (!isAtEnd() && isAlphaNumericOrUnderscore(peek())) {
-        value.push_back(advance());
-    }
-
-    TokenType type = KEYWORDS.count(value) ? TokenType::KEYWORD : TokenType::IDENTIFIER;
-    return Token{type, value, tokenLine, tokenColumn};
-}
-
-Token Lexer::makeNumber() {
-    int tokenLine = line;
-    int tokenColumn = column;
-
-    std::string value;
-    bool seenDot = false;
-
-    while (!isAtEnd()) {
-        char c = peek();
-        if (isDigit(c)) {
-            value.push_back(advance());
-        } else if (c == '.' && !seenDot && isDigit(peek(1))) {
-            seenDot = true;
-            value.push_back(advance());
-        } else {
-            break;
-        }
-    }
-
-    TokenType type = seenDot ? TokenType::FLOAT : TokenType::INTEGER;
-    return Token{type, value, tokenLine, tokenColumn};
-}
-
-Token Lexer::makeString() {
-    // Starting '"' already consumed by caller
-    int tokenLine = line;
-    int tokenColumn = column; // This column points to position after the opening quote
-
-    std::string value;
-    bool terminated = false;
-    while (!isAtEnd()) {
-        char c = advance();
-        if (c == '"') {
-            terminated = true;
-            break;
-        }
-        if (c == '\\') {
-            // Escape sequence: include next char as-is if present
-            if (!isAtEnd()) {
-                char next = advance();
-                value.push_back('\\');
-                value.push_back(next);
-                continue;
-            }
-        }
-        value.push_back(c);
-    }
-
-    if (!terminated) {
-        return Token{TokenType::UNKNOWN, value, tokenLine, tokenColumn - 1};
-    }
-    return Token{TokenType::STRING, value, tokenLine, tokenColumn - 1};
-}
-
-Token Lexer::makeChar() {
-    // Starting '\'' already consumed by caller
-    int tokenLine = line;
-    int tokenColumn = column; // position after opening quote
-
-    std::string value;
-    if (isAtEnd()) {
-        return Token{TokenType::UNKNOWN, value, tokenLine, tokenColumn - 1};
-    }
-
-    char c = advance();
-    if (c == '\\') {
-        // escape sequence: include escaped char
-        if (!isAtEnd()) {
-            char next = advance();
-            value.push_back('\\');
-            value.push_back(next);
-        } else {
-            return Token{TokenType::UNKNOWN, value, tokenLine, tokenColumn - 1};
-        }
-    } else {
-        value.push_back(c);
-    }
-
-    // expect closing quote
-    if (peek() == '\'') {
-        advance();
-        return Token{TokenType::CHAR, value, tokenLine, tokenColumn - 1};
-    }
-
-    return Token{TokenType::UNKNOWN, value, tokenLine, tokenColumn - 1};
-}
-
-Token Lexer::makeOperatorOrSeparator() {
-    int tokenLine = line;
-    int tokenColumn = column;
-
-    char c = advance();
-    std::string value(1, c);
-
-    // Multi-char operators: ==, !=, <=, >=
-    if ((c == '=' || c == '!' || c == '<' || c == '>') && peek() == '=') {
-        value.push_back(advance());
-        return Token{TokenType::OPERATOR, value, tokenLine, tokenColumn};
-    }
-
-    // Single-char operators
-    switch (c) {
-        case '+': case '-': case '*': case '/': case '%':
-        case '=': case '<': case '>':
-            return Token{TokenType::OPERATOR, value, tokenLine, tokenColumn};
-        case ';': case ',': case '(': case ')': case '{': case '}': case '[': case ']':
-            return Token{TokenType::SEPARATOR, value, tokenLine, tokenColumn};
-        default:
-            return Token{TokenType::UNKNOWN, value, tokenLine, tokenColumn};
+        ++pos;
     }
 }
 
 Token Lexer::nextToken() {
     skipWhitespace();
 
-    if (isAtEnd()) {
-        return Token{TokenType::EOF_TOKEN, "", line, column};
+    if (pos >= src.size())
+        return { TokenType::EOF_TOKEN, "", line, column };
+
+    char current = src[pos];
+
+    // Identifiers and Keywords (letters and underscores, then letters/digits/_)
+    if (std::isalpha(static_cast<unsigned char>(current)) || current == '_') {
+        size_t start = pos;
+        int startCol = column;
+        while (pos < src.size() && (std::isalnum(static_cast<unsigned char>(src[pos])) || src[pos] == '_')) {
+            ++pos;
+            ++column;
+        }
+        std::string word = src.substr(start, pos - start);
+        TokenType t = isKeyword(word) ? TokenType::KEYWORD : TokenType::IDENTIFIER;
+        return { t, word, line, startCol };
     }
 
-    char c = peek();
-
-    if (isAlpha(c)) {
-        return makeIdentifierOrKeyword();
+    // Numbers: integer or float (simple)
+    if (std::isdigit(static_cast<unsigned char>(current))) {
+        size_t start = pos;
+        int startCol = column;
+        bool isFloat = false;
+        while (pos < src.size() && (std::isdigit(static_cast<unsigned char>(src[pos])) || src[pos] == '.')) {
+            if (src[pos] == '.') {
+                if (isFloat) {
+                    // second dot -> stop (we'll treat rest as unknown or separate tokens)
+                    break;
+                }
+                isFloat = true;
+            }
+            ++pos;
+            ++column;
+        }
+        std::string number = src.substr(start, pos - start);
+        return { isFloat ? TokenType::FLOAT : TokenType::INTEGER, number, line, startCol };
     }
 
-    if (isDigit(c)) {
-        return makeNumber();
+    // String literal "..."
+    if (current == '"') {
+        size_t start = pos;
+        int startCol = column;
+        ++pos; ++column; // skip opening quote
+        std::string value;
+        bool closed = false;
+        while (pos < src.size()) {
+            if (src[pos] == '"') {
+                closed = true;
+                ++pos; ++column; // consume closing quote
+                break;
+            }
+            // simplistic escape handling: allow \" inside string
+            if (src[pos] == '\\' && pos + 1 < src.size()) {
+                value += src[pos];
+                value += src[pos + 1];
+                pos += 2;
+                column += 2;
+                continue;
+            }
+            value += src[pos];
+            ++pos; ++column;
+        }
+        if (!closed) {
+            // unterminated string — return as UNKNOWN token with what we collected
+            return { TokenType::UNKNOWN, std::string(src.substr(start, pos - start)), line, startCol };
+        }
+        return { TokenType::STRING, value, line, startCol };
     }
 
-    if (c == '"') {
-        advance(); // consume opening quote
-        return makeString();
+    // Char literal 'a'
+    if (current == '\'') {
+        size_t start = pos;
+        int startCol = column;
+        ++pos; ++column; // skip opening quote
+        if (pos >= src.size()) {
+            // malformed
+            return { TokenType::UNKNOWN, std::string(1, '\''), line, startCol };
+        }
+        std::string value;
+        if (src[pos] == '\\' && pos + 1 < src.size()) {
+            // escaped char like '\n' or '\''
+            value += src[pos];
+            value += src[pos + 1];
+            pos += 2;
+            column += 2;
+        } else {
+            value += src[pos];
+            ++pos; ++column;
+        }
+
+        // expect closing quote
+        if (pos < src.size() && src[pos] == '\'') {
+            ++pos; ++column; // consume closing quote
+            return { TokenType::CHAR, value, line, startCol };
+        } else {
+            // malformed char literal
+            return { TokenType::UNKNOWN, std::string(src.substr(start, pos - start)), line, startCol };
+        }
     }
 
-    if (c == '\'') {
-        advance(); // consume opening quote
-        return makeChar();
+    // Operators (single and two-char like ==, !=, <=, >=)
+    if (std::string("+-*/%=&|<>!").find(current) != std::string::npos) {
+        int startCol = column;
+        std::string op(1, current);
+        // check two-character operators
+        if (pos + 1 < src.size()) {
+            char next = src[pos + 1];
+            if ((current == '=' && next == '=') ||
+                (current == '!' && next == '=') ||
+                (current == '<' && next == '=') ||
+                (current == '>' && next == '=') ||
+                (current == '&' && next == '&') ||
+                (current == '|' && next == '|')) {
+                op += next;
+                pos += 2;
+                column += 2;
+                return { TokenType::OPERATOR, op, line, startCol };
+            }
+        }
+        // single char operator
+        ++pos;
+        ++column;
+        return { TokenType::OPERATOR, op, line, startCol };
     }
 
-    return makeOperatorOrSeparator();
+    // Separators
+    if (std::string("(),;{}[]").find(current) != std::string::npos) {
+        std::string sep(1, current);
+        int startCol = column;
+        ++pos;
+        ++column;
+        return { TokenType::SEPARATOR, sep, line, startCol };
+    }
+
+    // Anything else: unknown single char
+    std::string single(1, current);
+    int startCol = column;
+    ++pos;
+    ++column;
+    return { TokenType::UNKNOWN, single, line, startCol };
 }
-
 
