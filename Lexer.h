@@ -1,39 +1,44 @@
-// Lexer.h
 #pragma once
-
 #include <string>
+#include <vector>
 #include <unordered_set>
-#include "Utility.h"
+
+// Token types
+enum class TokenType {
+    IDENTIFIER,
+    KEYWORD,
+    INTEGER,
+    FLOAT,
+    STRING,
+    CHAR,
+    OPERATOR,
+    SEPARATOR,
+    COMMENT,
+    UNKNOWN,
+    EOF_TOKEN
+};
+
+// Token structure
+struct Token {
+    TokenType tkType;
+    std::string value;
+    int line;
+    int column;
+};
 
 class Lexer {
 public:
-    explicit Lexer(const std::string& source);
-
-    // Get next token from the source
+    explicit Lexer(const std::string& input);
     Token nextToken();
 
 private:
     std::string src;
-    std::size_t index;
-    int line;
-    int column;
+    size_t pos;
+    int line, column;
 
-    static const std::unordered_set<std::string> KEYWORDS;
+    static const std::unordered_set<std::string> keywords;
 
-    char peek(int lookahead = 0) const;
-    char advance();
-    bool isAtEnd() const;
+    bool isKeyword(const std::string& word) const;
     void skipWhitespace();
-
-    static bool isAlpha(char c);
-    static bool isDigit(char c);
-    static bool isAlphaNumericOrUnderscore(char c);
-
-    Token makeIdentifierOrKeyword();
-    Token makeNumber();
-    Token makeString();
-    Token makeChar();
-    Token makeOperatorOrSeparator();
+    void skipComment();
 };
-
-
