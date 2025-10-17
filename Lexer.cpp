@@ -9,7 +9,9 @@ const std::unordered_set<std::string> Lexer::keywords = {
 
 // Constructor
 Lexer::Lexer(const std::string& input)
-    : src(input), pos(0), line(1), column(1) {}
+    : src(input), pos(0), line(1), column(1) {
+    std::cout << "[DEBUG] Lexer initialized. Input length: " << src.size() << "\n";
+}
 
 bool Lexer::isKeyword(const std::string& word) const {
     return keywords.count(word) > 0;
@@ -21,6 +23,7 @@ void Lexer::skipWhitespace() {
         if (src[pos] == '\n') {
             ++line;
             column = 1;
+            std::cout << "[DEBUG] Newline encountered. Line: " << line << "\n";
         } else {
             ++column;
         }
@@ -33,18 +36,21 @@ void Lexer::skipComment() {
     if (pos + 1 >= src.size()) return;
 
     if (src[pos] == '/' && src[pos + 1] == '/') {
+        std::cout << "[DEBUG] Single-line comment starting at line " << line << ", column " << column << "\n";
         pos += 2;
         column += 2;
         while (pos < src.size() && src[pos] != '\n') {
             ++pos; ++column;
         }
     } else if (src[pos] == '/' && src[pos + 1] == '*') {
+        std::cout << "[DEBUG] Multi-line comment starting at line " << line << ", column " << column << "\n";
         pos += 2;
         column += 2;
         while (pos + 1 < src.size()) {
             if (src[pos] == '*' && src[pos + 1] == '/') {
                 pos += 2;
                 column += 2;
+                std::cout << "[DEBUG] Multi-line comment ended at line " << line << ", column " << column << "\n";
                 return;
             }
             if (src[pos] == '\n') {
@@ -55,6 +61,7 @@ void Lexer::skipComment() {
             }
             ++pos;
         }
+        std::cout << "[DEBUG] Warning: Unclosed multi-line comment.\n";
     }
 }
 
@@ -63,8 +70,10 @@ Token Lexer::nextToken() {
     while (true) {
         skipWhitespace();
 
-        if (pos >= src.size())
+        if (pos >= src.size()) {
+            std::cout << "[DEBUG] End of input reached.\n";
             return { TokenType::EOF_TOKEN, "", line, column };
+        }
 
         // Handle comments
         if (src[pos] == '/' && pos + 1 < src.size() &&
@@ -77,6 +86,7 @@ Token Lexer::nextToken() {
     }
 
     char current = src[pos];
+    std::cout << "[DEBUG] Processing character '" << current << "' at line " << line << ", column " << column << "\n";
 
     // Identifiers or Keywords
     if (std::isalpha(static_cast<unsigned char>(current)) || current == '_') {
@@ -88,6 +98,8 @@ Token Lexer::nextToken() {
         }
         std::string word = src.substr(start, pos - start);
         TokenType t = isKeyword(word) ? TokenType::KEYWORD : TokenType::IDENTIFIER;
+        std::cout << "[DEBUG] " << (t == TokenType::KEYWORD ? "Keyword" : "Identifier")
+                  << " found: '" << word << "' at line " << line << ", column " << startCol << "\n";
         return { t, word, line, startCol };
     }
 
@@ -112,6 +124,8 @@ Token Lexer::nextToken() {
         }
 
         std::string number = src.substr(start, pos - start);
+        std::cout << "[DEBUG] " << (isFloat ? "Float" : "Integer")
+                  << " found: '" << number << "' at line " << line << ", column " << startCol << "\n";
         return { isFloat ? TokenType::FLOAT : TokenType::INTEGER, number, line, startCol };
     }
 
@@ -122,6 +136,8 @@ Token Lexer::nextToken() {
         ++pos; ++column;
         std::string value;
         bool closed = false;
+
+        std::cout << "[DEBUG] String literal started at line " << line << ", column " << startCol << "\n";
 
         while (pos < src.size()) {
             char c = src[pos];
@@ -139,9 +155,11 @@ Token Lexer::nextToken() {
         }
 
         if (!closed) {
+            std::cout << "[DEBUG] Warning: Unclosed string literal.\n";
             return { TokenType::UNKNOWN, src.substr(start, pos - start), line, startCol };
         }
 
+        std::cout << "[DEBUG] String found: \"" << value << "\"\n";
         return { TokenType::STRING, value, line, startCol };
     }
 
@@ -164,13 +182,15 @@ Token Lexer::nextToken() {
 
         if (pos < src.size() && src[pos] == '\'') {
             ++pos; ++column;
+            std::cout << "[DEBUG] Char literal found: '" << value << "'\n";
             return { TokenType::CHAR, value, line, startCol };
         } else {
+            std::cout << "[DEBUG] Warning: Unclosed char literal.\n";
             return { TokenType::UNKNOWN, src.substr(start, pos - start), line, startCol };
         }
     }
 
-    // Operators (support ++, --, +=, -=, *=, /=, etc.)
+    // Operators
     if (std::string("+-*/%=&|<>!").find(current) != std::string::npos) {
         int startCol = column;
         std::string op(1, current);
@@ -183,11 +203,13 @@ Token Lexer::nextToken() {
                 two == "*=" || two == "/=" || two == "%=" ||
                 two == "&&" || two == "||") {
                 pos += 2; column += 2;
+                std::cout << "[DEBUG] Operator found: '" << two << "'\n";
                 return { TokenType::OPERATOR, two, line, startCol };
             }
         }
 
         ++pos; ++column;
+        std::cout << "[DEBUG] Operator found: '" << op << "'\n";
         return { TokenType::OPERATOR, op, line, startCol };
     }
 
@@ -196,6 +218,7 @@ Token Lexer::nextToken() {
         std::string sep(1, current);
         int startCol = column;
         ++pos; ++column;
+        std::cout << "[DEBUG] Separator found: '" << sep << "' at line " << line << ", column " << startCol << "\n";
         return { TokenType::SEPARATOR, sep, line, startCol };
     }
 
@@ -203,6 +226,6 @@ Token Lexer::nextToken() {
     std::string single(1, current);
     int startCol = column;
     ++pos; ++column;
+    std::cout << "[DEBUG] Unknown character: '" << single << "' at line " << line << ", column " << startCol << "\n";
     return { TokenType::UNKNOWN, single, line, startCol };
 }
-
